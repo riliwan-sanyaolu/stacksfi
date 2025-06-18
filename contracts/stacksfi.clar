@@ -89,3 +89,105 @@
     total-dividends: uint, ;; Cumulative dividend pool
   }
 )
+
+;; Token Ownership Ledger
+(define-map token-balances
+  {
+    owner: principal,
+    asset-id: uint,
+  }
+  { balance: uint } ;; SFT token balance
+)
+
+;; KYC/AML Compliance Registry
+(define-map kyc-status
+  { address: principal }
+  {
+    is-approved: bool, ;; KYC approval status
+    level: uint, ;; Verification level (1-5)
+    expiry: uint, ;; KYC expiration block
+  }
+)
+
+;; Governance Proposal Registry
+(define-map proposals
+  { proposal-id: uint }
+  {
+    title: (string-ascii 256), ;; Proposal title/description
+    asset-id: uint, ;; Target asset ID
+    start-height: uint, ;; Voting start block
+    end-height: uint, ;; Voting end block
+    executed: bool, ;; Execution status
+    votes-for: uint, ;; Supporting votes (weighted)
+    votes-against: uint, ;; Opposition votes (weighted)
+    minimum-votes: uint, ;; Quorum threshold
+  }
+)
+
+;; Voting Records Ledger
+(define-map votes
+  {
+    proposal-id: uint,
+    voter: principal,
+  }
+  { vote-amount: uint } ;; Weighted vote amount
+)
+
+;; Dividend Distribution Tracking
+(define-map dividend-claims
+  {
+    asset-id: uint,
+    claimer: principal,
+  }
+  { last-claimed-amount: uint } ;; Last claimed dividend total
+)
+
+;; Price Oracle Integration
+(define-map price-feeds
+  { asset-id: uint }
+  {
+    price: uint, ;; Current asset price
+    decimals: uint, ;; Price decimal precision
+    last-updated: uint, ;; Last oracle update block
+    oracle: principal, ;; Authorized oracle address
+  }
+)
+
+;; VALIDATION FUNCTIONS
+
+;; Validate asset value within economic constraints
+(define-private (validate-asset-value (value uint))
+  (and
+    (>= value MIN-ASSET-VALUE)
+    (<= value MAX-ASSET-VALUE)
+  )
+)
+
+;; Validate governance proposal duration
+(define-private (validate-duration (duration uint))
+  (and
+    (>= duration MIN-DURATION)
+    (<= duration MAX-DURATION)
+  )
+)
+
+;; Validate KYC verification level
+(define-private (validate-kyc-level (level uint))
+  (<= level MAX-KYC-LEVEL)
+)
+
+;; Validate expiry timestamp constraints
+(define-private (validate-expiry (expiry uint))
+  (and
+    (> expiry stacks-block-height)
+    (<= (- expiry stacks-block-height) MAX-EXPIRY)
+  )
+)
+
+;; Validate governance voting thresholds
+(define-private (validate-minimum-votes (vote-count uint))
+  (and
+    (> vote-count u0)
+    (<= vote-count tokens-per-asset)
+  )
+)
