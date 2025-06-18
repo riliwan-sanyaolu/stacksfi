@@ -191,3 +191,106 @@
     (<= vote-count tokens-per-asset)
   )
 )
+
+;; Validate metadata URI format and length
+(define-private (validate-metadata-uri (uri (string-ascii 256)))
+  (and
+    (> (len uri) u0)
+    (<= (len uri) u256)
+  )
+)
+
+;; CORE PUBLIC FUNCTIONS
+
+;; Asset Registration & Tokenization
+;; Registers a new real-world asset and creates corresponding SFT tokens
+(define-public (register-asset
+    (metadata-uri (string-ascii 256))
+    (asset-value uint)
+  )
+  (begin
+    ;; Access Control: Only contract owner can register assets
+    (asserts! (is-eq tx-sender contract-owner) err-owner-only)
+    ;; Input Validation
+    (asserts! (validate-metadata-uri metadata-uri) err-invalid-uri)
+    (asserts! (validate-asset-value asset-value) err-invalid-value)
+    (let ((asset-id (get-next-asset-id)))
+      ;; Create asset registry entry
+      (map-set assets { asset-id: asset-id } {
+        owner: contract-owner,
+        metadata-uri: metadata-uri,
+        asset-value: asset-value,
+        is-locked: false,
+        creation-height: stacks-block-height,
+        last-price-update: stacks-block-height,
+        total-dividends: u0,
+      })
+      ;; Mint initial SFT token supply to asset owner
+      (map-set token-balances {
+        owner: contract-owner,
+        asset-id: asset-id,
+      } { balance: tokens-per-asset }
+      )
+      ;; Update global asset counter
+      (var-set last-asset-id asset-id)
+      (ok asset-id)
+    )
+  )
+)
+
+;; Dividend Distribution System
+;; Allows token holders to claim proportional dividends from asset revenue
+(define-public (claim-dividends (asset-id uint))
+  (let (
+      (asset (unwrap! (get-asset-info asset-id) err-not-found))
+      (balance (get-balance tx-sender asset-id))
+      (last-claim (get-last-claim asset-id tx-sender))
+      (total-dividends (get total-dividends asset))
+      (claimable-amount (/ (* balance (- total-dividends last-claim)) tokens-per-asset))
+    )
+    ;; Ensure there are claimable dividends
+    (asserts! (> claimable-amount u0) err-invalid-amount)
+    ;; Update dividend claim record
+    (ok (map-set dividend-claims {
+      asset-id: asset-id,
+      claimer: tx-sender,
+    } { last-claimed-amount: total-dividends }
+    ))
+  )
+)
+
+;; Decentralized Governance System
+;; Creates proposals for asset management decisions with token-weighted voting
+(define-public (create-proposal
+    (asset-id uint)
+    (title (string-ascii 256))
+    (duration uint)
+    (minimum-votes uint)
+  )
+  (begin
+    ;; Input Validation
+    (asserts! (validate-duration duration) err-invalid-duration)
+    (asserts! (validate-minimum-votes minimum-votes) err-invalid-votes)
+    (asserts! (validate-metadata-uri title) err-invalid-title)
+    ;; Authorization: Require minimum 10% token ownership to create proposals
+    (asserts! (>= (get-balance tx-sender asset-id) (/ tokens-per-asset u10))
+      err-not-authorized
+    )
+    (let ((proposal-id (get-next-proposal-id)))
+      ;; Create governance proposal
+      (map-set proposals { proposal-id: proposal-id } {
+        title: title,
+        asset-id: asset-id,
+        start-height: stacks-block-height,
+        end-height: (+ stacks-block-height duration),
+        executed: false,
+        votes-for: u0,
+        votes-against: u0,
+        minimum-votes: minimum-votes,
+      })
+      ;; Update global proposal counter
+      (var-set last-proposal-id proposal-id)
+      (ok proposal-id)
+    )
+  )
+)
