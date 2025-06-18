@@ -294,3 +294,111 @@
     )
   )
 )
+
+;; Governance Voting Mechanism
+;; Enables token-weighted voting on asset governance proposals
+(define-public (vote
+    (proposal-id uint)
+    (vote-for bool)
+    (amount uint)
+  )
+  (let (
+      (proposal (unwrap! (get-proposal proposal-id) err-not-found))
+      (asset-id (get asset-id proposal))
+      (balance (get-balance tx-sender asset-id))
+    )
+    (begin
+      ;; Voting Validation
+      (asserts! (>= balance amount) err-invalid-amount)
+      (asserts! (< stacks-block-height (get end-height proposal)) err-vote-ended)
+      (asserts! (is-none (get-vote proposal-id tx-sender)) err-vote-exists)
+      ;; Record vote
+      (map-set votes {
+        proposal-id: proposal-id,
+        voter: tx-sender,
+      } { vote-amount: amount }
+      )
+      ;; Update proposal vote tallies
+      (ok (map-set proposals { proposal-id: proposal-id }
+        (merge proposal {
+          votes-for: (if vote-for
+            (+ (get votes-for proposal) amount)
+            (get votes-for proposal)
+          ),
+          votes-against: (if vote-for
+            (get votes-against proposal)
+            (+ (get votes-against proposal) amount)
+          ),
+        })
+      ))
+    )
+  )
+)
+
+;; READ-ONLY QUERY FUNCTIONS
+
+;; Asset Information Retrieval
+(define-read-only (get-asset-info (asset-id uint))
+  (map-get? assets { asset-id: asset-id })
+)
+
+;; Token Balance Query
+(define-read-only (get-balance
+    (owner principal)
+    (asset-id uint)
+  )
+  (default-to u0
+    (get balance
+      (map-get? token-balances {
+        owner: owner,
+        asset-id: asset-id,
+      })
+    ))
+)
+
+;; Governance Proposal Details
+(define-read-only (get-proposal (proposal-id uint))
+  (map-get? proposals { proposal-id: proposal-id })
+)
+
+;; Voting Record Query
+(define-read-only (get-vote
+    (proposal-id uint)
+    (voter principal)
+  )
+  (map-get? votes {
+    proposal-id: proposal-id,
+    voter: voter,
+  })
+)
+
+;; Price Oracle Data
+(define-read-only (get-price-feed (asset-id uint))
+  (map-get? price-feeds { asset-id: asset-id })
+)
+
+;; Dividend Claim History
+(define-read-only (get-last-claim
+    (asset-id uint)
+    (claimer principal)
+  )
+  (default-to u0
+    (get last-claimed-amount
+      (map-get? dividend-claims {
+        asset-id: asset-id,
+        claimer: claimer,
+      })
+    ))
+)
+
+;; INTERNAL HELPER FUNCTIONS
+
+;; Asset ID Generation
+(define-private (get-next-asset-id)
+  (+ (var-get last-asset-id) u1)
+)
+
+;; Proposal ID Generation  
+(define-private (get-next-proposal-id)
+  (+ (var-get last-proposal-id) u1)
+)
