@@ -402,3 +402,13 @@
 (define-private (get-next-proposal-id)
   (+ (var-get last-proposal-id) u1)
 )
+
+;; Current Asset Counter Access
+(define-private (get-last-asset-id)
+  (some (var-get last-asset-id))
+)
+
+;; Current Proposal Counter Access
+(define-private (get-last-proposal-id)
+  (some (var-get last-proposal-id))
+)
